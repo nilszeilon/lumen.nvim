@@ -3,7 +3,7 @@ local curl = require("plenary.curl")
 
 -- Default configuration
 M.config = {
-	journal_dir = vim.fn.expand("~/journal"), -- Default journal directory
+	journal_dir = vim.fn.expand("~/lumen"), -- Default journal directory
 	db_name = "lumen.db", -- Default database name
 	anthropic_api_key = os.getenv("ANTHROPIC_API_KEY"), -- Get API key from environment
 	model = "claude-3-5-sonnet-20241022", -- Default model
@@ -295,15 +295,15 @@ function M.setup(opts)
 	end
 
 	-- Create commands
-	vim.api.nvim_create_user_command("JournalNew", function()
+	vim.api.nvim_create_user_command("LumenNew", function()
 		M.create_journal_entry()
 	end, {})
 
-	vim.api.nvim_create_user_command("JournalDBInfo", function()
+	vim.api.nvim_create_user_command("LumenDBInfo", function()
 		M.show_db_info()
 	end, {})
 
-	vim.api.nvim_create_user_command("JournalAnalyze", function()
+	vim.api.nvim_create_user_command("LumenAnalyze", function()
 		M.analyze_journal_entry()
 	end, {})
 end
