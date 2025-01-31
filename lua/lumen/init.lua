@@ -238,13 +238,12 @@ function M.analyze_journal_entry()
 		vim.notify("Failed to get SQL statements from Claude", vim.log.levels.ERROR)
 		return
 	end
-	vim.notify("Claude returned SQL statements:\n" .. sql_statements, vim.log.levels.INFO)
 	-- Execute all SQL statements at once
 	local result = sqlite_exec(sql_statements)
 	if result ~= nil then
-		vim.notify("Successfully executed SQL statements", vim.log.levels.INFO)
+		vim.notify("Successfully stored entries to the database.", vim.log.levels.INFO)
 	else
-		vim.notify("Failed to execute SQL statements", vim.log.levels.ERROR)
+		vim.notify("Failed to store entries to the database.", vim.log.levels.ERROR)
 	end
 end
 
