@@ -1,6 +1,6 @@
 # lumen.nvim
 
-lumen.nvim is a journal that automatically extracts data points from your journal notes.
+A journaling system that self extracts data from your notes.
 
 ## Prerequisites
 
