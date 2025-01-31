@@ -4,7 +4,71 @@ local M = {}
 M.config = {
 	journal_dir = vim.fn.expand("~/journal"), -- Default journal directory
 	db_name = "lumen.db", -- Default database name
+	anthropic_api_key = os.getenv("ANTHROPIC_API_KEY"), -- Get API key from environment
+	model = "claude-2", -- Default model
 }
+
+-- Claude API endpoint
+local CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
+
+-- Function to make HTTP requests
+local function make_request(url, method, headers, body)
+	local curl_command = string.format(
+		'curl -s -X %s "%s" -H "Content-Type: application/json" %s',
+		method,
+		url,
+		table.concat(
+			vim.tbl_map(function(h)
+				return string.format('-H "%s"', h)
+			end, headers),
+			" "
+		)
+	)
+
+	if body then
+		curl_command = string.format("%s -d '%s'", curl_command, vim.fn.json_encode(body))
+	end
+
+	local response = vim.fn.system(curl_command)
+	if vim.v.shell_error ~= 0 then
+		error(string.format("API request failed: %s", response))
+	end
+
+	return vim.fn.json_decode(response)
+end
+
+-- Function to call Claude API
+function M.call_claude(prompt, context)
+	if not M.config.anthropic_api_key then
+		error("Anthropic API key not set. Please set ANTHROPIC_API_KEY environment variable or configure it in setup()")
+	end
+
+	local headers = {
+		string.format("x-api-key: %s", M.config.anthropic_api_key),
+		"anthropic-version: 2023-06-01",
+	}
+
+	local messages = {
+		{
+			role = "user",
+			content = context and string.format("%s\n\nContext:\n%s", prompt, context) or prompt,
+		},
+	}
+
+	local body = {
+		model = M.config.model,
+		messages = messages,
+		max_tokens = 1024,
+	}
+
+	local response = make_request(CLAUDE_API_URL, "POST", headers, body)
+
+	if response.error then
+		error(string.format("Claude API error: %s", vim.inspect(response.error)))
+	end
+
+	return response.content[1].text
+end
 
 -- Function to execute SQLite commands
 local function sqlite_exec(query)
