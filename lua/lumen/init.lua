@@ -7,6 +7,13 @@ M.config = {
 	db_name = "lumen.db", -- Default database name
 	anthropic_api_key = os.getenv("ANTHROPIC_API_KEY"), -- Get API key from environment
 	model = "claude-3-5-sonnet-20241022", -- Default model
+	template = function(date)
+		return {
+			"# Journal Entry: " .. date,
+			"",
+			"",
+		}
+	end,
 }
 
 -- Claude API endpoint
@@ -104,12 +111,7 @@ function M.create_journal_entry()
 
 	-- If the file is new (empty), add a template
 	if vim.fn.getfsize(filepath) == -1 or vim.fn.getfsize(filepath) == 0 then
-		local template = {
-			"# Journal Entry: " .. date,
-			"",
-			"## Notes",
-			"",
-		}
+		local template = M.config.template(date)
 		vim.api.nvim_buf_set_lines(0, 0, -1, false, template)
 	end
 end
