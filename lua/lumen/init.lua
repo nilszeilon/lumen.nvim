@@ -43,8 +43,8 @@ function M.create_journal_entry()
 	end
 end
 
--- Function to get database information
-function M.show_db_info()
+-- Private function to get database information
+local function get_database_info()
 	local info = {}
 
 	-- Get database file size
@@ -56,31 +56,39 @@ function M.show_db_info()
 
 	-- Get SQLite version
 	local version = sqlite_exec("SELECT sqlite_version();")
-	table.insert(info, string.format("SQLite Version: %s", version:gsub("%s+$", "")))
+	if version then
+		table.insert(info, string.format("SQLite Version: %s", version:gsub("%s+$", "")))
+	end
 	table.insert(info, "")
 
 	-- Get all tables with row counts
 	local tables_output = sqlite_exec('SELECT name FROM sqlite_master WHERE type="table" ORDER BY name')
 	local tables = {}
-	for table_name in tables_output:gmatch("([^\n]+)") do
-		table.insert(tables, { table_name })
+	if tables_output then
+		for table_name in tables_output:gmatch("([^\n]+)") do
+			table.insert(tables, { table_name })
+		end
 	end
 
 	table.insert(info, "Tables:")
 	table.insert(info, string.rep("-", 40))
 
 	-- For each table, get column information and row count
-	if tables then
+	if tables and #tables > 0 then
 		for _, table_data in ipairs(tables) do
 			local table_name = table_data[1]
 			local columns_output = sqlite_exec(string.format("PRAGMA table_info(%s)", table_name))
 			local columns = {}
-			for line in columns_output:gmatch("([^\n]+)") do
-				local cid, name, type, notnull, dflt_value, pk = line:match("(%d+)|([^|]+)|([^|]+)|(%d+)|([^|]*)|(%d+)")
-				table.insert(columns, { tonumber(cid), name, type, tonumber(notnull), dflt_value, tonumber(pk) })
+			if columns_output then
+				for line in columns_output:gmatch("([^\n]+)") do
+					local cid, name, type, notnull, dflt_value, pk =
+						line:match("(%d+)|([^|]+)|([^|]+)|(%d+)|([^|]*)|(%d+)")
+					table.insert(columns, { tonumber(cid), name, type, tonumber(notnull), dflt_value, tonumber(pk) })
+				end
 			end
 
-			local row_count = tonumber(sqlite_exec(string.format("SELECT COUNT(*) FROM %s", table_name)):match("(%d+)"))
+			local row_count_result = sqlite_exec(string.format("SELECT COUNT(*) FROM %s", table_name))
+			local row_count = row_count_result and tonumber(row_count_result:match("(%d+)")) or 0
 
 			-- Table header with row count
 			table.insert(info, string.format("📊 %s (%d rows)", table_name, row_count))
@@ -106,11 +114,16 @@ function M.show_db_info()
 			end
 			table.insert(info, "")
 		end
-	end
-
-	if not tables or #tables == 0 then
+	else
 		table.insert(info, "No tables found in database")
 	end
+
+	return info
+end
+
+-- Function to show database information in a floating window
+function M.show_db_info()
+	local info = get_database_info()
 
 	-- Display the information in a floating window
 	local buf = vim.api.nvim_create_buf(false, true)
