@@ -1,11 +1,12 @@
 local M = {}
+local curl = require("plenary.curl")
 
 -- Default configuration
 M.config = {
 	journal_dir = vim.fn.expand("~/journal"), -- Default journal directory
 	db_name = "lumen.db", -- Default database name
 	anthropic_api_key = os.getenv("ANTHROPIC_API_KEY"), -- Get API key from environment
-	model = "claude-2", -- Default model
+	model = "claude-3-5-sonnet-20241022", -- Default model
 }
 
 -- Claude API endpoint
@@ -13,28 +14,30 @@ local CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
 
 -- Function to make HTTP requests
 local function make_request(url, method, headers, body)
-	local curl_command = string.format(
-		'curl -s -X %s "%s" -H "Content-Type: application/json" %s',
-		method,
+	-- Convert headers array to dictionary format for plenary.curl
+	local header_dict = {
+		["Content-Type"] = "application/json",
+	}
+	for _, header in ipairs(headers) do
+		local key, value = header:match("([^:]+):%s*(.*)")
+		if key and value then
+			header_dict[key] = value
+		end
+	end
+
+	local response = curl[method:lower()]( -- plenary.curl methods are lowercase
 		url,
-		table.concat(
-			vim.tbl_map(function(h)
-				return string.format('-H "%s"', h)
-			end, headers),
-			" "
-		)
+		{
+			headers = header_dict,
+			body = body and vim.fn.json_encode(body) or nil,
+		}
 	)
 
-	if body then
-		curl_command = string.format("%s -d '%s'", curl_command, vim.fn.json_encode(body))
+	if not response or response.status ~= 200 then
+		error(string.format("API request failed: %s", vim.inspect(response)))
 	end
 
-	local response = vim.fn.system(curl_command)
-	if vim.v.shell_error ~= 0 then
-		error(string.format("API request failed: %s", response))
-	end
-
-	return vim.fn.json_decode(response)
+	return vim.fn.json_decode(response.body)
 end
 
 -- Function to call Claude API
@@ -73,14 +76,18 @@ end
 -- Function to execute SQLite commands
 local function sqlite_exec(query)
 	local db_path = vim.fs.joinpath(M.config.journal_dir, M.config.db_name)
-	local cmd = string.format("sqlite3 %s '%s'", vim.fn.shellescape(db_path), query)
+	-- Escape BOTH the database path and the query
+	local escaped_db = vim.fn.shellescape(db_path)
+	local escaped_query = vim.fn.shellescape(query)
+
+	-- Use -batch and -cmd for non-interactive execution
+	local cmd = string.format("sqlite3 -batch %s %s", escaped_db, escaped_query)
 	local output = vim.fn.system(cmd)
 
 	if vim.v.shell_error ~= 0 then
 		vim.notify("SQLite error: " .. output, vim.log.levels.ERROR)
 		return nil
 	end
-
 	return output
 end
 
@@ -185,6 +192,60 @@ local function get_database_info()
 	return info
 end
 
+function M.analyze_journal_entry()
+	-- Check if current file is in journal directory
+	local current_file = vim.fn.expand("%:p")
+	if not string.match(current_file, "^" .. vim.fn.escape(M.config.journal_dir, "%-%.()[]*+?^$")) then
+		vim.notify("Current file is not in the journal directory", vim.log.levels.ERROR)
+		return
+	end
+
+	-- Get current file content
+	local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+	local content = table.concat(lines, "\n")
+
+	-- Get existing table schemas
+	local schemas = get_database_info()
+	local schemas_str = vim.inspect(schemas)
+
+	-- Prepare prompt for Claude
+	local prompt = [[
+    Analyze this journal entry and generate SQLite statements to store any data points found.
+
+    Rules:
+    1. Return ONLY valid SQL statements, one per line
+    2. Use existing tables where appropriate
+    3. Create new tables if needed
+    4. Include CREATE TABLE statements for new tables
+    5. Include INSERT statements for data
+    6. Do not drop or modify existing tables
+    7. Use appropriate data types (TEXT, INTEGER, REAL, DATE)
+    8. Add timestamps where appropriate
+    9. Return only the SQL statements, no explanations
+    10. Do not link any tables
+
+    Existing tables and their schemas:
+    ]] .. schemas_str .. [[
+
+    Journal content to analyze:
+    ]] .. content
+
+	-- Call Claude API
+	local sql_statements = M.call_claude(prompt, nil)
+	if not sql_statements then
+		vim.notify("Failed to get SQL statements from Claude", vim.log.levels.ERROR)
+		return
+	end
+	vim.notify("Claude returned SQL statements:\n" .. sql_statements, vim.log.levels.INFO)
+	-- Execute all SQL statements at once
+	local result = sqlite_exec(sql_statements)
+	if result ~= nil then
+		vim.notify("Successfully executed SQL statements", vim.log.levels.INFO)
+	else
+		vim.notify("Failed to execute SQL statements", vim.log.levels.ERROR)
+	end
+end
+
 -- Function to show database information in a floating window
 function M.show_db_info()
 	local info = get_database_info()
@@ -240,6 +301,10 @@ function M.setup(opts)
 
 	vim.api.nvim_create_user_command("JournalDBInfo", function()
 		M.show_db_info()
+	end, {})
+
+	vim.api.nvim_create_user_command("JournalAnalyze", function()
+		M.analyze_journal_entry()
 	end, {})
 end
 
