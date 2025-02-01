@@ -2,7 +2,7 @@
 
 Lumen is my idea of having a single input, a daily journal where data is extracted as it is mentioned. The data is stored in a sqlite database, and will add tables over time to fit the data in your journal entries.
 
-https://github.com/user-attachments/assets/2c45fa07-1db3-4c11-9135-3bf6b63b8cf8
+https://github.com/user-attachments/assets/90606d8d-bc71-42cd-88e8-28c52004bfe8
 
 ## Prerequisites
 
