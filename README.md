@@ -2,6 +2,10 @@
 
 A journaling system that self extracts data from your notes.
 
+
+https://github.com/user-attachments/assets/2c45fa07-1db3-4c11-9135-3bf6b63b8cf8
+
+
 ## Prerequisites
 
 - Neovim >= 0.8.0
