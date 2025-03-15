@@ -216,15 +216,15 @@ function M.analyze_journal_entry()
 
     Rules:
     1. Return ONLY valid SQL statements, one per line
-    2. Use existing tables where appropriate
-    3. Create new tables if needed
-    4. Include CREATE TABLE statements for new tables
-    5. Include INSERT statements for data
-    6. Do not drop or modify existing tables
-    7. Use appropriate data types (TEXT, INTEGER, REAL, DATE)
-    8. Add timestamps where appropriate
-    9. Return only the SQL statements, no explanations
-    10. Do not link any tables
+    2. Use ONLY existing tables - DO NOT create new tables
+    3. Include ONLY INSERT statements for data
+    4. Do not return any CREATE TABLE statements
+    5. Do not drop or modify existing tables
+    6. Use appropriate data types (TEXT, INTEGER, REAL, DATE)
+    7. Add timestamps where appropriate
+    8. Return only the SQL statements, no explanations
+    9. Do not link any tables
+    10. If there's data that doesn't fit into existing tables, ignore it
 
     Existing tables and their schemas:
     ]] .. schemas_str .. [[
@@ -286,6 +286,97 @@ function M.show_db_info()
 	vim.keymap.set("n", "<esc>", "<cmd>close<cr>", opts)
 end
 
+-- Function to create a new table in the database
+function M.create_table()
+	-- Create input dialog for table name
+	vim.ui.input({ prompt = "Enter table name: " }, function(table_name)
+		if not table_name or table_name == "" then
+			vim.notify("Table creation cancelled", vim.log.levels.INFO)
+			return
+		end
+
+		-- Create buffer for SQL CREATE TABLE statement
+		local buf = vim.api.nvim_create_buf(false, true)
+		vim.api.nvim_buf_set_lines(buf, 0, -1, false, {
+			"-- Enter your CREATE TABLE statement below",
+			"-- Example:",
+			"-- CREATE TABLE " .. table_name .. " (",
+			"--   id INTEGER PRIMARY KEY,",
+			"--   name TEXT NOT NULL,",
+			"--   value REAL,",
+			"--   timestamp TEXT DEFAULT CURRENT_TIMESTAMP",
+			"-- );",
+			"",
+			"CREATE TABLE " .. table_name .. " (",
+			"  id INTEGER PRIMARY KEY,",
+			"  -- Add your columns here",
+			"  timestamp TEXT DEFAULT CURRENT_TIMESTAMP",
+			");",
+		})
+
+		-- Open the buffer in a floating window
+		local width = math.min(80, vim.o.columns - 4)
+		local height = math.min(20, vim.o.lines - 4)
+
+		local win = vim.api.nvim_open_win(buf, true, {
+			relative = "editor",
+			width = width,
+			height = height,
+			row = math.floor((vim.o.lines - height) / 2),
+			col = math.floor((vim.o.columns - width) / 2),
+			style = "minimal",
+			border = "rounded",
+			title = " Create Table: " .. table_name .. " ",
+			title_pos = "center",
+		})
+
+		-- Set buffer options
+		vim.bo[buf].modifiable = true
+		vim.bo[buf].bufhidden = "wipe"
+		vim.bo[buf].filetype = "sql"
+
+		-- Set window options
+		vim.wo[win].wrap = false
+		vim.wo[win].conceallevel = 0
+		vim.wo[win].foldenable = false
+
+		-- Add mappings for saving or canceling
+		local opts = { silent = true, noremap = true, buffer = buf }
+		vim.keymap.set("n", "<esc>", function()
+			vim.api.nvim_win_close(win, true)
+			vim.notify("Table creation cancelled", vim.log.levels.INFO)
+		end, opts)
+
+		vim.keymap.set("n", "<C-s>", function()
+			local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+			local sql = table.concat(vim.tbl_filter(function(line)
+				return not line:match("^%s*%-%-") -- Filter out comment lines
+			end, lines), "\n")
+
+			-- Execute the SQL statement
+			local result = sqlite_exec(sql)
+			vim.api.nvim_win_close(win, true)
+
+			if result ~= nil then
+				vim.notify("Table '" .. table_name .. "' created successfully", vim.log.levels.INFO)
+			else
+				vim.notify("Failed to create table", vim.log.levels.ERROR)
+			end
+		end, opts)
+
+		-- Display help text at the bottom of the window
+		vim.api.nvim_create_autocmd("BufEnter", {
+			buffer = buf,
+			once = true,
+			callback = function()
+				vim.api.nvim_echo({
+					{ "Press <C-s> to save, <Esc> to cancel", "WarningMsg" },
+				}, false, {})
+			end,
+		})
+	end)
+end
+
 -- Setup function to allow user configuration
 function M.setup(opts)
 	M.config = vim.tbl_deep_extend("force", M.config, opts or {})
@@ -306,6 +397,10 @@ function M.setup(opts)
 
 	vim.api.nvim_create_user_command("LumenAnalyze", function()
 		M.analyze_journal_entry()
+	end, {})
+
+	vim.api.nvim_create_user_command("LumenCreateTable", function()
+		M.create_table()
 	end, {})
 end
 
